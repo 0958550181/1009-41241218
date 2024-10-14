@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>記憶翻牌遊戲</title>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            min-height: 100vh;
+            background-color: #f0f8ff;
+            margin: 0;
+            padding: 20px;
+        }
+
+        h1 {
+            color: #333;
+            font-size: 3rem;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        .controls {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .controls label, .controls select, .controls button {
+            font-size: 1.2rem;
+        }
+
+        .controls select, .controls button, .controls input {
+            padding: 10px;
+            border-radius: 5px;
+            border: none;
+            background-color: #4CAF50;
+            color: white;
+            cursor: pointer;
+        }
+
+        .controls button:hover, .controls select:hover, .controls input:hover {
+            background-color: #45a049;
+        }
+
+        .checkbox {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        #gameGrid {
+            display: grid;
+            grid-gap: 15px;
+            margin-top: 20px;
+        }
+
+        .card {
+            width: 100px;
+            height: 100px;
+            background-color: #007BFF;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 2rem;
+            color: white;
+            cursor: pointer;
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+            transition: transform 0.3s;
+        }
+
+        .card img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            border-radius: 10px;
+            display: none; /* 先隱藏圖片 */
+        }
+
+        .card.flipped img {
+            display: block; /* 翻開後顯示圖片 */
+        }
+
+        .card.matched img {
+            visibility: hidden; /* 配對成功後隱藏圖片 */
+        }
+
+        .card.flipped {
+            background-color: #FFD700;
+            color: black;
+        }
+
+        .card.matched {
+            visibility: hidden;
+        }
+    </style>
+</head>
+<body>
+    <h1>記憶翻牌遊戲</h1>
+    
+    <div class="controls">
+        <div>
+            <label for="timer">選擇倒數計時：</label>
+            <select id="timer">
+                <option value="10">10 秒</option>
+                <option value="15">15 秒</option>
+                <option value="20">20 秒</option>
+            </select>
+        </div>
+
+        <div>
+            <button onclick="startGame(2)">2x2 網格</button>
+            <button onclick="startGame(4)">4x4 網格</button>
+            <button onclick="startGame(6)">6x6 網格</button>
+        </div>
+
+        <div class="checkbox">
+            <label for="hideCompleted">
+                <input type="checkbox" id="hideCompleted"> 隱藏已完成的圖片
+            </label>
+        </div>
+    </div>
+    
+    <div id="gameGrid" style="grid-template-columns: repeat(4, 1fr);"></div>
+    
+    <!-- 加入成功與失敗音效 -->
+    <audio id="successAudio">
+        <source src="答對.mp3" type="audio/mpeg">
+    </audio>
+    <audio id="failureAudio">
+        <source src="答錯.mp3" type="audio/mpeg">
+    </audio>
+
+    <script>
+        let flippedCards = [];
+        let matchedPairs = 0;
+        let lockBoard = false; // 防止在兩張牌檢查時點擊更多牌
+
+        // 初始化遊戲
+        function startGame(gridSize) {
+            const gameGrid = document.getElementById("gameGrid");
+            gameGrid.innerHTML = ''; // 清空網格
+            gameGrid.style.gridTemplateColumns = `repeat(${gridSize}, 1fr)`;
+
+            const cardCount = gridSize * gridSize;
+            const cardValues = generateCardValues(cardCount);
+            
+            for (let i = 0; i < cardCount; i++) {
+                const card = document.createElement("div");
+                card.className = "card";
+                card.dataset.value = cardValues[i];
+
+                // 卡片圖片元素
+                const img = document.createElement('img');
+                img.src = cardValues[i]; // 設定圖片路徑
+                card.appendChild(img);
+
+                card.onclick = flipCard;
+                gameGrid.appendChild(card);
+            }
+
+            matchedPairs = 0;
+            flippedCards = [];
+            lockBoard = false;
+        }
+
+        // 產生配對的圖片（根據數量生成配對的圖片路徑）
+        function generateCardValues(cardCount) {
+            const imagePaths = [
+                '1.png', '2.png', '3.png', '4.png',
+                '5.png', '6.png', '7.png', '8.png','01.png','02.png','03.png','04.png','05.png','06.png','07.png','08.png','9.png','10.png',
+            ]; // 根據實際圖片路徑修改
+            const values = [];
+            const pairCount = cardCount / 2;
+            for (let i = 0; i < pairCount; i++) {
+                values.push(imagePaths[i], imagePaths[i]); // 每張圖片兩次
+            }
+            return values.sort(() => 0.5 - Math.random()); // 隨機排序
+        }
+
+        // 翻開卡片的邏輯
+        function flipCard() {
+            if (lockBoard || this.classList.contains("flipped")) return; // 防止翻同一張牌或在檢查中點擊
+
+            this.classList.add("flipped");
+            flippedCards.push(this);
+
+            if (flippedCards.length === 2) {
+                lockBoard = true; // 鎖住牌板，直到檢查結束
+                checkMatch();
+            }
+        }
+
+        // 檢查是否配對成功
+        function checkMatch() {
+            const [card1, card2] = flippedCards;
+            if (card1.dataset.value === card2.dataset.value) {
+                card1.classList.add("matched");
+                card2.classList.add("matched");
+                document.getElementById("successAudio").play(); // 播放配對成功音效
+                matchedPairs++;
+
+                if (matchedPairs === document.getElementById("gameGrid").children.length / 2) {
+                    alert("恭喜！你完成了遊戲！");
+                }
+
+                lockBoard = false; // 解除鎖定
+                flippedCards = [];
+            } else {
+                document.getElementById("failureAudio").play(); // 播放配對失敗音效
+                setTimeout(() => {
+                    card1.classList.remove("flipped");
+                    card2.classList.remove("flipped");
+                    lockBoard = false; // 解除鎖定
+                    flippedCards = [];
+                }, 1000); // 1秒後自動翻回
+            }
+        }
+    </script>
+</body>
+</html>
